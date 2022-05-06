@@ -1,0 +1,113 @@
+---
+- hosts: '{{ APP_ENV | default("dev") }}'
+  become: true
+  vars_files:
+    - vars/default.yml
+
+  tasks:
+    - name: Install Prerequisites
+      apt: name={{ item }} update_cache=yes state=latest force_apt_get=yes
+      loop: [ 'aptitude' ]
+
+    - name: Install Packages
+      apt: name={{ item }} update_cache=yes state=latest
+      loop: [ 'nginx', 'php', 'php-fpm', 'php-cli' ]
+    
+    - name: Install Additional
+      apt: name={{ item }} update_cache=yes state=latest
+      loop: [ 'php-curl' ]
+      when: APP_PROJECT_GROUP == "two" 
+
+# Del old conf
+
+    - name: del old conf
+      command: sudo sh -c "rm /etc/nginx/sites-available/*"
+
+# Nginx Configuration
+    - name: Sets Nginx conf file
+      template:
+        src: "files/nginx.conf.j2"
+        dest: "/etc/nginx/sites-available/{{ APP_PROJECT_NAME }}.example.local"
+
+    - name: Enables new site
+      file:
+        src: "/etc/nginx/sites-available/{{ APP_PROJECT_NAME }}.example.local"
+        dest: "/etc/nginx/sites-enabled/{{ APP_PROJECT_NAME }}.example.local"
+        state: link
+      notify: Reload Nginx
+    
+    - name: Removes "default" site
+      file:
+        path: "/etc/nginx/sites-enabled/default"
+        state: absent
+      notify: Reload Nginx
+
+# UFW Configuration
+    - name: "UFW - Allow HTTP on port {{ http_port }}"
+      ufw:
+        rule: allow
+        port: "{{ http_port }}"
+        proto: tcp
+
+# Sets Up PHP Info Page
+    - name: Sets Up PHP Info Page
+      template:
+        src: "files/info.php.j2"
+        dest: "/var/www/html/info.php"
+
+# Copy index.php
+    - name: Copy index.php
+      copy: 
+        src: "files/index.php"
+        dest: "/var/www/html/index.php"
+
+# Add env var to config php
+    - name: Copy www.conf
+#      command: sudo sh -c "echo 'env[APP_PROJECT_GROUP]={{ APP_PROJECT_GROUP }}\nenv[APP_ENV]={{ APP_ENV }}\nenv[APP_PROJECT_NAME]={{ APP_PROJECT_NAME }}' >> /etc/php/8.1/fpm/pool.d/www.conf"
+#      notify: Restart PHP
+      copy:
+        src: "files/www.conf"
+        dest: "/etc/php/8.1/fpm/pool.d/www.conf"
+      notify: Restart PHP
+
+# Copy www.conf_v
+    - name: Copy www.conf_v
+      template:
+        src: "files/www.conf_v.j2"
+        dest: "/etc/php/8.1/fpm/pool.d/www.conf_v"
+
+# Add var to www.conf
+    - name: Add var to www.conf
+      command: sudo sh -c "cat /etc/php/8.1/fpm/pool.d/www.conf_v >> /etc/php/8.1/fpm/pool.d/www.conf"
+      notify: Restart PHP 
+
+# Change PHP parameters
+# upload_max_filesize = 64M
+# post_max_size = 128M
+# memory_limit = 256M
+# max_execution_time = 600
+# max_input_vars = 5000
+# max_input_time = 400
+    - name: Copy php.ini
+      copy:
+        src: "files/php.ini"
+        dest: "/etc/php/8.1/fpm/php.ini"
+      when: APP_ENV == "prod"
+      notify: Restart PHP
+
+  handlers:
+    - name: Reload Nginx
+      service:
+        name: nginx
+        state: reloaded
+
+    - name: Restart Nginx
+      service:
+        name: nginx
+        state: restarted
+
+    - name: Restart PHP
+      service: 
+        name: php8.1-fpm
+        state: restarted
+

@@ -1,0 +1,6 @@
+
+[prod]
+worker ansible_host=3.127.243.128 ansible_user=ubuntu ansible_ssh_private_key_file=/home/ec2-user/.ssh/common.pem
+
+[stage]
+worker1 ansible_host=18.197.100.202 ansible_user=ubuntu ansible_ssh_private_key_file=/home/ec2-user/.ssh/common.pem

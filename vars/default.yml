@@ -1,0 +1,6 @@
+#http_host: "my_site"
+#http_conf: "my_site.conf"
+http_port: "80"
+APP_PROJECT_GROUP: "one"
+APP_ENV: "stage"
+APP_PROJECT_NAME: "awesome"
